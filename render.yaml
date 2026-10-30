@@ -31,7 +31,7 @@ services:
   - type: web
     name: stockpilot-ai-frontend
     runtime: static
-    plan: free
+   
     rootDir: frontend
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
