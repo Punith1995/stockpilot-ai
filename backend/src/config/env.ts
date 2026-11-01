@@ -14,12 +14,14 @@ const schema = z.object({
   ADMIN_TOKEN: z.string().min(16).optional(),
   ENCRYPTION_KEY: z.string().min(32).optional(),
   ALERT_WEBHOOK_URL: z.string().url().optional(),
+  ANTHROPIC_API_KEY: z.string().min(20).optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 });
 
 export type Env = z.infer<typeof schema> & {
   corsOrigins: string[];
   kiteConfigured: boolean;
+  llmConfigured?: boolean;
 };
 
 /** Validates process configuration. Throws with a readable list of problems. */
@@ -39,5 +41,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     ...env,
     corsOrigins: env.CORS_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean),
     kiteConfigured: Boolean(env.KITE_API_KEY && env.KITE_API_SECRET && env.KITE_REDIRECT_URL),
+    llmConfigured: Boolean(env.ANTHROPIC_API_KEY),
   };
 }

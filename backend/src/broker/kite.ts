@@ -59,11 +59,23 @@ export class KiteService {
   logout(): void { this.markExpired(); }
 
   status() {
+    const key = this.env.KITE_API_KEY ?? "";
     return {
       configured: this.configured,
       connected: this.encryptedToken !== null,
+      apiKeyMasked: key ? `••••${key.slice(-4)}` : null,
       tokenSetAt: this.tokenSetAt ? new Date(this.tokenSetAt).toISOString() : null,
+      tokenExpiresAt: this.tokenSetAt ? approxKiteExpiry(this.tokenSetAt) : null,
       note: "Kite access tokens are session-bound and are not stored on disk. Restarting the server clears them.",
     };
   }
+}
+
+/** Kite sessions are believed to end at about 06:00 IST each day (not verified against the live service). */
+export function approxKiteExpiry(setAt: number): string {
+  const IST = 19_800_000, DAY = 86_400_000;
+  const ist = setAt + IST;
+  let six = Math.floor(ist / DAY) * DAY + 6 * 3_600_000;
+  if (ist >= six) six += DAY;
+  return new Date(six - IST).toISOString();
 }

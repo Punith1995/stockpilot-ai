@@ -14,10 +14,13 @@ describe("analysis endpoints", () => {
     }
     expect(res.body.values.ema20).not.toBeNull();
   });
-  it("multi-timeframe returns 1, 5 and 15 minute frames with a bias", async () => {
+  it("multi-timeframe returns all nine timeframes with computed values and a summary", async () => {
     const res = await request(app).get("/api/v1/mtf/INFY");
-    expect(res.body.frames.map((f: { interval: number }) => f.interval)).toEqual([1, 5, 15]);
-    expect(["BULLISH", "BEARISH", "NEUTRAL", "UNKNOWN"]).toContain(res.body.frames[0].bias);
+    expect(res.body.frames.map((f: { timeframe: string }) => f.timeframe)).toEqual(["1", "3", "5", "10", "15", "30", "60", "240", "D"]);
+    expect(["Bullish", "Bearish", "Sideways", "Unknown"]).toContain(res.body.frames[0].trend);
+    expect(typeof res.body.frames[0].ema200).toBe("number");
+    expect(typeof res.body.frames[0].adx14).toBe("number");
+    expect(res.body.summary.totalFrames).toBe(9);
   });
   it("data quality reports kept and dropped counts that add up", async () => {
     const res = await request(app).get("/api/v1/data/quality/RELIANCE");

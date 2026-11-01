@@ -99,3 +99,23 @@ export function aggregate(base: Candle[], baseIntervalMin: number, intervalMin: 
     .sort((a, b) => a.time - b.time)
     .map((b) => ({ ...b, complete: b.count >= expected }));
 }
+
+/** Groups 1-minute sample candles into one candle per IST session. */
+export function aggregateDaily(base: Candle[]): Candle[] {
+  const out: Candle[] = [];
+  let cur: Candle | null = null;
+  let day = -1;
+  for (const c of base) {
+    const k = istParts(c.time).dayKey;
+    if (!cur || k !== day) {
+      if (cur) out.push(cur);
+      day = k;
+      cur = { time: c.time, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume };
+    } else {
+      const prevBar: Candle = cur as Candle;
+      cur = { time: prevBar.time, open: prevBar.open, high: Math.max(prevBar.high, c.high), low: Math.min(prevBar.low, c.low), close: c.close, volume: prevBar.volume + c.volume };
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}

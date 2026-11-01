@@ -25,9 +25,9 @@ export function KiteDataPanel() {
   const dataKite = source.data?.kiteInstruments ?? 0;
 
   return (
-    <Card title="Kite historical data · opt-in · UNVERIFIED" actions={<Badge tone="amber">Not used by charts or scans</Badge>}>
+    <Card title="Kite historical data · UNVERIFIED" actions={<Badge tone="amber">Feeds charts, scans and backtests after login</Badge>}>
       <p className="mb-3 text-sm text-slate-400">
-        Fetches real NSE history through your Kite session. The endpoints have not been checked against the live service, so the first call may fail or return a different format. Charts and scans keep using SAMPLE data.
+        Fetches real NSE history through your Kite session. The endpoints have not been checked against the live service, so the first call may fail or return a different format. After login, the five stocks load into the same live bars used by charts, scans, backtests, Multi-Timeframe, the analyst, paper trading and alerts.
       </p>
       <ErrorBox error={source.error ?? load.error ?? fetchC.error} />
       <div className="flex flex-wrap items-end gap-3 text-sm">

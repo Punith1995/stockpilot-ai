@@ -29,7 +29,7 @@ export interface TradeRecord {
   qty: number;
   initialStop: number;
   target: number;
-  exitReason: "STOP" | "TARGET" | "EMA_CROSS_DOWN" | "MAX_HOLD" | "END_OF_DATA" | "TRAIL_STOP";
+  exitReason: "STOP" | "TARGET" | "EMA_CROSS_DOWN" | "STRATEGY_EXIT" | "MAX_HOLD" | "END_OF_DATA" | "TRAIL_STOP";
   grossPnl: number;
   costs: number;
   netPnl: number;

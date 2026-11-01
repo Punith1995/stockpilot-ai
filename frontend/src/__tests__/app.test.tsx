@@ -23,7 +23,7 @@ describe("app shell", () => {
     vi.stubGlobal("WebSocket", class { onopen = null; onmessage = null; onclose = null; close() {} constructor() {} } as unknown as typeof WebSocket);
     renderAt("/");
     expect(screen.getByText("PAPER ONLY")).toBeInTheDocument();
-    expect(screen.getByText("Data: SAMPLE")).toBeInTheDocument();
+    expect(screen.getByText("SAMPLE DATA")).toBeInTheDocument();
     expect(screen.getByText(/No real orders are placed/)).toBeInTheDocument();
   });
 
@@ -32,6 +32,6 @@ describe("app shell", () => {
     vi.stubGlobal("WebSocket", class { onopen = null; onmessage = null; onclose = null; close() {} constructor() {} } as unknown as typeof WebSocket);
     renderAt("/backtest");
     expect(screen.getByText(/Enter the admin token/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Run" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Run backtest" })).toBeDisabled();
   });
 });

@@ -70,7 +70,11 @@ export interface StrategyConfig {
   maxPositionPct: number;
   lotSize: number;
   conditions: Record<ConditionId, ConditionSetting>;
+  /** Optional AND/OR groups. Each group must pass; members are removed from the flat mandatory/optional rules. */
+  groups?: ConditionGroup[];
 }
+
+export interface ConditionGroup { id: string; op: "AND" | "OR"; members: ConditionId[] }
 
 export const EMA_MOMENTUM_PRO: StrategyConfig = {
   name: "StockPilot EMA Momentum Pro",
@@ -171,7 +175,11 @@ export function planLong(S: SeriesBundle, i: number, cfg: StrategyConfig, entryP
 }
 
 export interface CheckResult { id: ConditionId; label: string; enabled: boolean; mandatory: boolean; pass: boolean | null; detail: string }
-export interface Evaluation { index: number; time: number; signal: "BUY" | "WAIT"; checks: CheckResult[]; failedMandatory: ConditionId[]; plan: RiskPlan | null; planReason?: string }
+export interface GroupResult { id: string; op: "AND" | "OR"; members: ConditionId[]; pass: boolean }
+export interface Evaluation { index: number; time: number; signal: "BUY" | "WAIT"; checks: CheckResult[]; failedMandatory: string[]; groups: GroupResult[]; plan: RiskPlan | null; planReason?: string }
+
+/** Conditions that cannot be placed in a group: they always apply. */
+export const ALWAYS_MANDATORY: ConditionId[] = ["dataSufficiency", "riskPlan"];
 
 /**
  * Evaluates the long setup on closed bar i. `complete` says whether bar i is a finished
@@ -215,7 +223,7 @@ export function evaluateLong(S: SeriesBundle, i: number, cfg: StrategyConfig, op
 
   const checks: CheckResult[] = CONDITION_IDS.map((id) => {
     const set = cfg.conditions[id];
-    const alwaysMandatory = id === "dataSufficiency" || id === "riskPlan";
+    const alwaysMandatory = ALWAYS_MANDATORY.includes(id);
     return {
       id, label: CONDITION_LABELS[id],
       enabled: set.enabled || alwaysMandatory,
@@ -224,11 +232,23 @@ export function evaluateLong(S: SeriesBundle, i: number, cfg: StrategyConfig, op
       detail: raw[id].detail,
     };
   });
-  const failedMandatory = checks.filter((k) => k.enabled && k.mandatory && k.pass !== true).map((k) => k.id);
-  const optionalPassed = checks.filter((k) => k.enabled && !k.mandatory).every((k) => k.pass !== false);
+
+  // Group members are judged by their group (AND/OR), not by the flat mandatory/optional rules.
+  const grouped = new Set<ConditionId>((cfg.groups ?? []).flatMap((g) => g.members));
+  const groups: GroupResult[] = (cfg.groups ?? []).map((g) => {
+    const passes = g.members.map((m) => checks.find((k) => k.id === m)?.pass === true);
+    const pass = g.members.length > 0 && (g.op === "AND" ? passes.every(Boolean) : passes.some(Boolean));
+    return { id: g.id, op: g.op, members: g.members, pass };
+  });
+  const flat = checks.filter((k) => !grouped.has(k.id));
+  const failedMandatory = [
+    ...flat.filter((k) => k.enabled && k.mandatory && k.pass !== true).map((k) => k.id),
+    ...groups.filter((g) => !g.pass).map((g) => `group:${g.id}`),
+  ];
+  const optionalPassed = flat.filter((k) => k.enabled && !k.mandatory).every((k) => k.pass !== false);
   const signal = failedMandatory.length === 0 && optionalPassed && ready ? "BUY" : "WAIT";
   return {
-    index: i, time: c.time, signal, checks, failedMandatory,
+    index: i, time: c.time, signal, checks, failedMandatory, groups,
     plan: signal === "BUY" ? plan.plan : null,
     planReason: plan.reason,
   };

@@ -13,7 +13,7 @@ import { AuditLog } from "./audit/log.js";
 import { AlertStore } from "./alerts/store.js";
 import { createExtraRouter } from "./routes/extra.js";
 import { KiteHistorical } from "./data/kite-historical.js";
-import { SAMPLE_INSTRUMENTS, sampleCandles } from "./data/sample.js";
+import { MarketData } from "./data/market.js";
 
 export function createApp(env: Env) {
   const app = express();
@@ -22,13 +22,9 @@ export function createApp(env: Env) {
   const audit = new AuditLog();
   const alerts = new AlertStore();
   const kiteData = new KiteHistorical();
-  const barCache = new Map<string, ReturnType<typeof sampleCandles>>();
-  const bars = (sym: string, days = 30) => {
-    const key = `${sym}:${days}`;
-    let c = barCache.get(key);
-    if (!c) { c = sampleCandles(sym, days, SAMPLE_INSTRUMENTS.find((i) => i.symbol === sym)?.basePrice ?? 1000); barCache.set(key, c); }
-    return c;
-  };
+  const market = new MarketData(env, kite, kiteData);
+  market.startBackground();
+  const bars = (sym: string, days = 30) => market.bars(sym, days);
   app.disable("x-powered-by");
   app.set("trust proxy", 1); // Render sits behind a proxy
   app.use(helmet());
@@ -36,9 +32,25 @@ export function createApp(env: Env) {
   app.use(express.json({ limit: "64kb" }));
   app.use("/api", rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false }));
   app.get("/health", (_req, res) => res.json({ ok: true, uptimeSec: Math.round(process.uptime()) }));
-  app.use("/api/v1", createRouter({ env, paper, kite, audit }));
-  app.use("/api/v1", createExtraRouter({ env, audit, alerts, bars, knownSymbols: SAMPLE_INSTRUMENTS.map((i) => i.symbol), kite, kiteData }));
+  // Before any API call reads candles: refresh the five core stocks, and load any other NSE stock the request names.
+  // No-op when no Kite session is active.
+  app.use("/api/v1", async (req, _res, next) => {
+    try {
+      await market.ensure();
+      const named = new Set<string>();
+      for (const seg of req.path.split("/")) if (/^[A-Z][A-Z0-9&-]{0,19}$/.test(seg)) named.add(seg);
+      const b = req.body as { symbol?: unknown; symbols?: unknown } | undefined;
+      if (typeof b?.symbol === "string") named.add(b.symbol);
+      if (Array.isArray(b?.symbols)) for (const s of b.symbols) if (typeof s === "string") named.add(s);
+      const q = req.query.symbol;
+      if (typeof q === "string") named.add(q);
+      await market.loadSymbols([...named]);
+      next();
+    } catch (e) { next(e); }
+  });
+  app.use("/api/v1", createRouter({ env, paper, kite, audit, kiteData, market }));
+  app.use("/api/v1", createExtraRouter({ env, audit, alerts, bars, market, kite, kiteData }));
   app.use((_req, res) => res.status(404).json({ error: { code: "NOT_FOUND", message: "No such endpoint" } }));
   app.use(errorHandler);
-  return { app, paper, kite, audit };
+  return { app, paper, kite, audit, market };
 }

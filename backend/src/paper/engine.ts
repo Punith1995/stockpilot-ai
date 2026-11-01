@@ -10,9 +10,9 @@ import { checkEntry, DEFAULT_RISK_LIMITS, type RiskLimits } from "../risk/risk-m
 import { computeSeries, evaluateLong, round2, type RiskPlan, type StrategyConfig } from "../strategy/ema-momentum-pro.js";
 import { istParts } from "../domain/candles.js";
 
-export interface PaperOrder { id: string; symbol: string; signalTime: number; status: "PENDING" | "FILLED" | "REJECTED"; plan: RiskPlan; fillTime?: number; fillPrice?: number; reason?: string }
-export interface PaperPosition { symbol: string; qty: number; entry: number; stop: number; target: number; entryTime: number; initialStop: number; riskAmount: number; barsHeld: number }
-export interface PaperTrade { symbol: string; qty: number; entry: number; exit: number; entryTime: number; exitTime: number; reason: string; netPnl: number; costs: number }
+export interface PaperOrder { id: string; symbol: string; signalTime: number; status: "PENDING" | "FILLED" | "REJECTED"; plan: RiskPlan; fillTime?: number; fillPrice?: number; reason?: string; strategy?: string; entryReason?: string }
+export interface PaperPosition { symbol: string; qty: number; entry: number; stop: number; target: number; entryTime: number; initialStop: number; riskAmount: number; barsHeld: number; strategy?: string; entryReason?: string }
+export interface PaperTrade { symbol: string; qty: number; entry: number; exit: number; entryTime: number; exitTime: number; reason: string; netPnl: number; costs: number; strategy?: string; entryReason?: string }
 
 export class PaperEngine {
   readonly mode = "PAPER" as const;
@@ -67,10 +67,45 @@ export class PaperEngine {
       emergencyStop: this.emergencyStop,
     }, { symbol, orderValue });
     if (!risk.allowed) return { status: "BLOCKED", reasons: risk.reasons, evaluation: ev };
-    const order: PaperOrder = { id: `P${this.nextId++}`, symbol, signalTime: now, status: "PENDING", plan: ev.plan };
+    const passed = ev.checks.filter((c) => c.enabled && c.pass === true).map((c) => c.label);
+    const order: PaperOrder = { id: `P${this.nextId++}`, symbol, signalTime: now, status: "PENDING", plan: ev.plan, strategy: "EMA Momentum Pro", entryReason: passed.length ? `Conditions met: ${passed.join(", ")}` : "Strategy BUY signal" };
     this.orders.push(order);
     this.trim();
     return { status: "QUEUED", order, evaluation: ev };
+  }
+
+  /**
+   * Manual simulated buy at `price` (the last close, MARKET only). Same risk and cash checks as signal orders.
+   * Nothing is sent to a broker.
+   */
+  placeManual(symbol: string, price: number, now: number, qty: number, stop: number, target: number): { ok: true; order: PaperOrder } | { ok: false; reasons: string[] } {
+    const reasons: string[] = [];
+    if (this.positions.has(symbol)) reasons.push("already holding this stock");
+    if (!(stop < price)) reasons.push("stop must be below the entry price");
+    if (!(target > price)) reasons.push("target must be above the entry price");
+    if (reasons.length) return { ok: false, reasons };
+    const riskPerShare = price - stop;
+    const cost = qty * price;
+    if (cost > this.cash) return { ok: false, reasons: ["insufficient paper cash"] };
+    const risk = checkEntry(this.limits, {
+      openPositions: this.positions.size,
+      heldSymbols: [...this.positions.keys()],
+      dailyRealizedPnl: this.dailyPnl(now),
+      tradesToday: this.tradesToday(now),
+      exposureBySymbol: Object.fromEntries([...this.positions.values()].map((p) => [p.symbol, p.qty * p.entry])),
+      emergencyStop: this.emergencyStop,
+    }, { symbol, orderValue: cost });
+    if (!risk.allowed) return { ok: false, reasons: risk.reasons };
+    const plan = {
+      entry: round2(price), stop: round2(stop), target: round2(target), riskPerShare: round2(riskPerShare), qty,
+      positionValue: round2(cost), riskAmount: round2(qty * riskPerShare), rewardToRisk: round2((target - price) / riskPerShare),
+    };
+    const order: PaperOrder = { id: `P${this.nextId++}`, symbol, signalTime: now, status: "FILLED", plan, fillTime: now, fillPrice: plan.entry, strategy: "Manual order", entryReason: "Placed by you on the Paper Trading page" };
+    this.orders.push(order);
+    this.cash -= cost;
+    this.positions.set(symbol, { symbol, qty, entry: plan.entry, stop: plan.stop, target: plan.target, entryTime: now, initialStop: plan.stop, riskAmount: plan.riskAmount, barsHeld: 0, strategy: "Manual order", entryReason: "Placed by you on the Paper Trading page" });
+    this.trim();
+    return { ok: true, order };
   }
 
   /** Process a new bar for a symbol: fill pending orders at this bar's open, then manage exits. */
@@ -85,7 +120,7 @@ export class PaperEngine {
       if (cost > this.cash) { o.status = "REJECTED"; o.reason = "insufficient paper cash"; continue; }
       o.status = "FILLED"; o.fillTime = last.time; o.fillPrice = round2(last.open);
       this.cash -= cost;
-      this.positions.set(symbol, { symbol, qty: o.plan.qty, entry: last.open, stop: o.plan.stop, initialStop: o.plan.stop, target: o.plan.target, entryTime: last.time, riskAmount: o.plan.riskAmount, barsHeld: 0 });
+      this.positions.set(symbol, { symbol, qty: o.plan.qty, entry: last.open, stop: o.plan.stop, initialStop: o.plan.stop, target: o.plan.target, entryTime: last.time, riskAmount: o.plan.riskAmount, barsHeld: 0, strategy: o.strategy, entryReason: o.entryReason });
     }
     const pos = this.positions.get(symbol);
     if (!pos) return;
@@ -102,9 +137,14 @@ export class PaperEngine {
     const costs = tradeCosts("DELIVERY", pos.entry * pos.qty, price * pos.qty);
     const netPnl = round2(price * pos.qty - pos.entry * pos.qty - costs.total);
     this.cash += price * pos.qty - costs.total;
-    this.trades.push({ symbol, qty: pos.qty, entry: round2(pos.entry), exit: round2(price), entryTime: pos.entryTime, exitTime: time, reason, netPnl, costs: round2(costs.total) });
+    this.trades.push({ symbol, qty: pos.qty, entry: round2(pos.entry), exit: round2(price), entryTime: pos.entryTime, exitTime: time, reason, netPnl, costs: round2(costs.total), strategy: pos.strategy, entryReason: pos.entryReason });
     this.positions.delete(symbol);
     this.trim();
+  }
+
+  /** Symbols with an open position or a pending order. These must be checked on every scan. */
+  activeSymbols(): string[] {
+    return [...new Set([...this.positions.keys(), ...this.orders.filter((o) => o.status === "PENDING").map((o) => o.symbol)])];
   }
 
   /** Manual exit of all paper positions. Used by the emergency stop. */

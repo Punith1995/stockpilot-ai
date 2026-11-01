@@ -1,6 +1,6 @@
 /** In-memory alert rules and notifications. Bounded. No email, SMS or push delivery exists. */
 export type AlertType = "PRICE_ABOVE" | "PRICE_BELOW" | "SIGNAL_BUY";
-export interface AlertRule { id: string; symbol: string; type: AlertType; value?: number; createdAt: string }
+export interface AlertRule { id: string; symbol: string; type: AlertType; value?: number; createdAt: string; enabled: boolean; triggeredAt?: string }
 export interface Notification { at: string; ruleId: string; symbol: string; message: string; delivery?: "NOT_CONFIGURED" | "DELIVERED" | "FAILED"; deliveryError?: string }
 
 export class AlertStore {
@@ -8,8 +8,8 @@ export class AlertStore {
   notifications: Notification[] = [];
   private seq = 1;
 
-  add(rule: Omit<AlertRule, "id" | "createdAt">): AlertRule {
-    const r = { ...rule, id: `A${this.seq++}`, createdAt: new Date().toISOString() };
+  add(rule: Omit<AlertRule, "id" | "createdAt" | "enabled" | "triggeredAt">): AlertRule {
+    const r: AlertRule = { ...rule, id: `A${this.seq++}`, createdAt: new Date().toISOString(), enabled: true };
     this.rules.push(r);
     if (this.rules.length > 50) this.rules.splice(0, this.rules.length - 50);
     return r;

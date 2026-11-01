@@ -12,6 +12,12 @@ render.yaml Render Blueprint: backend web service + frontend static site
 .env.example
 ```
 
+## UI status against the reference screenshot
+- Restyled to the screenshot layout and colours: sidebar and top bar, Dashboard, Market Overview, Stock Scanner, Advanced Charts (price with EMA 20/50, RSI 14, MACD), Backtesting (equity and drawdown charts), Paper Trading, Strategy Builder (editable; test and save), Strategy Lab (comparison bars), AI Analyst, Live Trading (order button disabled), Portfolio & Risk, Alerts with Watchlists tab, Settings (Zerodha card).
+- Not checked by eye against the screenshot. Spacing and fonts may differ. Reports and Connection keep their earlier layout.
+- Strategy Builder: on/off choices apply to test runs only. Saved presets keep the numeric thresholds, not the on/off choices.
+- Market numbers come from `/api/v1/market/quotes`. They are SAMPLE until a Kite session is active, then they switch to Kite quotes. The Kite quote endpoint is unverified. If it fails, the page falls back to SAMPLE and shows the reason.
+
 ## Pages (frontend)
 | Page | What it does |
 |---|---|
@@ -59,7 +65,7 @@ All 24 spec pages now exist in some form. The AI Market Analyst is rule-based, n
 - WebSocket `/ws`: origin check, heartbeat, backpressure, paper status every 5 s
 
 ## Tests
-- Backend: 92 tests (`cd backend && npm test`) covering indicators, candles, costs, strategy look-ahead, risk gate, backtest and metrics, API security (admin guard, live-trading 403, validation), and paper-trading safety
+- Backend: 97 tests (`cd backend && npm test`) covering indicators, candles, costs, strategy look-ahead, risk gate, backtest and metrics, API security (admin guard, live-trading 403, validation), and paper-trading safety
 - Frontend: 18 tests (`cd frontend && npm test`) covering formatting, API client errors and token handling, app shell, and the Risk, Audit, Watchlist, Live Trading, Scanner Builder, Journal, Lab and Alerts pages
 - Typecheck and build for both (`npm run typecheck`, `npm run build`)
 
@@ -91,3 +97,14 @@ cd frontend && npm install && npm run dev   # http://localhost:5173, proxies /ap
 - **Strategy is unvalidated.** Nothing here shows the strategy has an edge. Use the backtest for learning, not as a recommendation.
 - **Shared types** are duplicated in `frontend/src/types.ts`, not in a separate shared package.
 - **Walk-forward** is a single out-of-sample split with no parameter re-optimisation. It is not full walk-forward testing.
+
+## Ten strategies (research only)
+
+Strategy Library lists ten common rule sets: EMA 20/50 crossover, RSI oversold bounce, MACD signal crossover, Bollinger lower-band bounce, opening range breakout (intraday), RSI momentum, Supertrend, breakout hunter, pullback in an uptrend, and volume breakout. The **Compare** button runs each one on SAMPLE data (`POST /api/v1/strategies/compare`, admin token required) and ranks them by out-of-sample net profit (last 30% of sessions).
+
+- No strategy is guaranteed to make a profit. The ranking uses generated sample data, so it is not evidence of how a strategy would do on NSE prices.
+- Costs, slippage and fills are simplified assumptions. Results are for learning how each rule behaves.
+
+## Database
+
+No database is required. State (paper account, alerts, journal notes, audit log) is held in memory and is lost when the backend restarts, which is accepted for this version. Render's free tier does not host a database for this app as configured. If persistence is needed later, a free external Postgres (for example Neon or Supabase free tier) would be the option to add.

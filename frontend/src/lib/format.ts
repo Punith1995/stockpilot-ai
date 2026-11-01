@@ -18,4 +18,5 @@ export const REASON_LABELS: Record<string, string> = {
   MAX_HOLD: "Max hold time",
   END_OF_DATA: "End of data",
   EMERGENCY_FLATTEN: "Emergency flatten",
+  STRATEGY_EXIT: "Strategy exit",
 };

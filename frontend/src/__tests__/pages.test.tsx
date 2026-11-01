@@ -34,7 +34,7 @@ describe("new pages", () => {
   it("watchlist editor disables saving without the admin token", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 })));
     wrap(<Watchlists />);
-    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save list" })).toBeDisabled();
   });
 });
 
@@ -44,7 +44,7 @@ describe("analysis and safety pages", () => {
     const { LiveTrading } = await import("../pages/LiveTrading");
     wrap(<LiveTrading />);
     expect(await screen.findByText(/Live trading is disabled/)).toBeInTheDocument();
-    expect(screen.queryByRole("button")).toBeNull();
+    for (const b of screen.queryAllByRole("button")) expect(b).toBeDisabled();
   });
 });
 
@@ -57,7 +57,7 @@ describe("builder and journal pages", () => {
     const { fireEvent } = await import("@testing-library/react");
     fireEvent.change(rsiMin, { target: { value: "90" } });
     expect(await screen.findByText(/must not exceed RSI max/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Run" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Run scanner" })).toBeDisabled();
   });
 
   it("journal note save is disabled without the admin token", async () => {
@@ -83,7 +83,7 @@ describe("library, lab and alerts pages", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [], note: "", }), { status: 200 })));
     const { Alerts } = await import("../pages/Alerts");
     wrap(<Alerts />);
-    expect(screen.getByRole("button", { name: "Add" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create alert" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Check now" })).toBeDisabled();
   });
 });
@@ -103,6 +103,6 @@ describe("analyst page", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 })));
     const { Analyst } = await import("../pages/Analyst");
     wrap(<Analyst />);
-    expect(screen.getByText("Not AI")).toBeInTheDocument();
+    expect(screen.getByText(/Rule-based, not AI/)).toBeInTheDocument();
   });
 });
